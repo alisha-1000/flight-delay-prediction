@@ -172,9 +172,14 @@ def wilson_interval(k: np.ndarray, n: np.ndarray, z: float = 1.96) -> tuple[np.n
 def rate_table(
     df: pd.DataFrame, by: str | list[str], target: str = "is_delayed", min_n: int = 1
 ) -> pd.DataFrame:
-    """Delay rate per group with sample size and 95% Wilson interval."""
-    g = df.groupby(by, observed=True)[target].agg(n="size", n_delayed="sum")
-    g = g[g["n"] >= min_n].copy()
+    """Delay rate per group with sample size and 95% Wilson interval.
+
+    ``n`` counts only rows with a non-missing label, so rows whose target is missing
+    (e.g. cancelled flights before a missing-label policy is applied) do not dilute the rate.
+    Groups with no labelled rows are dropped.
+    """
+    g = df.groupby(by, observed=True)[target].agg(n="count", n_delayed="sum")
+    g = g[g["n"] >= max(min_n, 1)].copy()
     g["delay_rate"] = g["n_delayed"] / g["n"]
     g["ci_low"], g["ci_high"] = wilson_interval(g["n_delayed"].to_numpy(), g["n"].to_numpy())
     return g

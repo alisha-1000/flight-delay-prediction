@@ -1,0 +1,29 @@
+# Core
+numpy>=1.26
+pandas>=2.1
+polars>=0.20          # optional fast alternative to pandas
+pyarrow>=14.0         # parquet I/O
+pyyaml>=6.0
+
+# Modelling
+scikit-learn>=1.4
+xgboost>=2.0
+
+# Visualisation
+matplotlib>=3.8
+seaborn>=0.13
+
+# Notebooks
+jupyterlab>=4.0
+ipykernel>=6.0
+
+# Data download
+kaggle>=1.6
+
+# Dev / quality
+pytest>=8.0
+pytest-cov>=4.1
+ruff>=0.4
+
+# Phase 2 (deep learning) — uncomment when needed
+# torch>=2.2

@@ -1,0 +1,45 @@
+# Central experiment configuration. All paths relative to repo root.
+seed: 42
+
+paths:
+  raw: data/raw/flights.csv          # TODO: confirm filename after download
+  interim: data/interim
+  processed: data/processed
+  models: models
+  figures: reports/figures
+  results: reports/results
+
+target:
+  column: arr_delay
+  threshold_minutes: 15              # BTS on-time convention
+  cancelled_policy: exclude          # TODO: exclude | delayed — justify in report
+
+decision_time:
+  # TODO: choose and justify. Options: "d_minus_1" (end of previous day) or "sched_dep_minus_2h".
+  mode: d_minus_1
+
+split:                               # chronological, inclusive date ranges (TODO: confirm)
+  train: ["2013-01-01", "2013-08-31"]
+  valid: ["2013-09-01", "2013-10-31"]
+  test:  ["2013-11-01", "2013-12-31"]
+
+features:
+  history_windows_days: [7, 28]      # rolling past-only delay rates
+  cyclic: [hour, day_of_week, month]
+
+evaluation:
+  operational_precision: 0.60        # TODO: justify; report recall at this precision
+  calibration_bins: 10
+
+models:
+  logreg:
+    C: 1.0
+    class_weight: balanced
+    max_iter: 1000
+  xgboost:
+    n_estimators: 500
+    learning_rate: 0.05
+    max_depth: 6
+    subsample: 0.8
+    colsample_bytree: 0.8
+    eval_metric: aucpr

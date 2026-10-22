@@ -1,11 +1,79 @@
-"""Load raw flight data."""
+"""Load the raw Kaggle *Flights* (nycflights13, 2013) CSV with an explicit schema.
 
+The raw file has 21 columns. Times are integers in local ``HHMM`` format; the actual
+times / delays are missing for cancelled flights, so they are read as nullable floats.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import numpy as np
 import pandas as pd
 
+# Column -> pandas dtype used when reading the raw CSV.
+RAW_DTYPES: dict[str, str] = {
+    "id": "int64",
+    "year": "int16",
+    "month": "int8",
+    "day": "int8",
+    "dep_time": "float64",  # actual, HHMM local; NaN if cancelled
+    "sched_dep_time": "int16",  # HHMM local
+    "dep_delay": "float64",  # minutes; NaN if cancelled
+    "arr_time": "float64",  # actual, HHMM local at destination
+    "sched_arr_time": "int16",  # HHMM local at destination
+    "arr_delay": "float64",  # minutes; NaN if cancelled / no arrival record
+    "carrier": "string",
+    "flight": "int32",
+    "tailnum": "string",
+    "origin": "string",
+    "dest": "string",
+    "air_time": "float64",  # minutes airborne
+    "distance": "int32",  # miles
+    "hour": "int8",  # scheduled departure hour
+    "minute": "int8",  # scheduled departure minute
+    "time_hour": "string",  # scheduled departure hour as text, parsed below
+    "name": "string",  # carrier full name
+}
 
-def load_raw(path: str) -> pd.DataFrame:
-    """Read the raw CSV with correct dtypes.
+RAW_COLUMNS: list[str] = list(RAW_DTYPES)
 
-    TODO: specify dtypes, parse dates, build a `date` / scheduled-departure datetime column.
+
+def hhmm_to_minutes(hhmm: pd.Series) -> pd.Series:
+    """Convert local ``HHMM`` integers (e.g. 1745) to minutes after midnight.
+
+    ``2400`` (used in the data for exactly midnight) maps to 1440. Missing values stay NaN.
     """
-    raise NotImplementedError
+    hhmm = pd.to_numeric(hhmm, errors="coerce")
+    return (hhmm // 100) * 60 + (hhmm % 100)
+
+
+def load_raw(path: str | Path, parse_dates: bool = True) -> pd.DataFrame:
+    """Read the raw CSV with explicit dtypes.
+
+    If ``parse_dates`` is True, also adds:
+
+    * ``date`` — flight date (``datetime64``), derived from year/month/day.
+    * ``sched_dep_dt`` — scheduled departure as a naive local datetime (origin airport).
+    * ``time_hour`` — parsed to ``datetime64``.
+
+    The function never drops or modifies raw values; cleaning happens in ``clean.py``.
+    """
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(
+            f"{path} not found. Place the Kaggle 'flights.csv' in data/raw/ (see data/README.md)."
+        )
+    df = pd.read_csv(path, dtype=RAW_DTYPES)
+
+    missing = set(RAW_COLUMNS) - set(df.columns)
+    if missing:
+        raise ValueError(f"Raw file is missing expected columns: {sorted(missing)}")
+
+    if parse_dates:
+        df["date"] = pd.to_datetime(df[["year", "month", "day"]].astype("int64"))
+        df["sched_dep_dt"] = df["date"] + pd.to_timedelta(
+            hhmm_to_minutes(df["sched_dep_time"]).astype(np.int64), unit="m"
+        )
+        df["time_hour"] = pd.to_datetime(df["time_hour"])
+    return df

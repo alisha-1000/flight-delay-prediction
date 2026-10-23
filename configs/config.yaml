@@ -15,7 +15,8 @@ target:
   cancelled_policy: exclude          # TODO: exclude | delayed — justify in report
 
 decision_time:
-  # TODO: choose and justify. Options: "d_minus_1" (end of previous day) or "sched_dep_minus_2h".
+  # Features for a flight on date D use only the published schedule and outcomes known by the
+  # end of day D-1 (see docs/leakage_policy.md). Alternative considered: "sched_dep_minus_2h".
   mode: d_minus_1
 
 split:                               # chronological, inclusive date ranges (TODO: confirm)
@@ -24,8 +25,11 @@ split:                               # chronological, inclusive date ranges (TOD
   test:  ["2013-11-01", "2013-12-31"]
 
 features:
-  history_windows_days: [7, 28]      # rolling past-only delay rates
-  cyclic: [hour, day_of_week, month]
+  history_windows_days: [1, 7, 28]   # rolling past-only windows ending at D-1 (1 = previous day)
+  history_include_all_past: true     # also an expanding all-past window
+  history_prior_strength: 20         # m in (k + m*p0) / (n + m) smoothing toward global past rate
+  categorical_min_count: 50          # train rows needed to keep a category level (else __OTHER__)
+  cyclic: [hour, day_of_week]          # month/day-of-year excluded: unseen months in valid/test
 
 evaluation:
   operational_precision: 0.60        # TODO: justify; report recall at this precision

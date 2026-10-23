@@ -1,14 +1,60 @@
-"""raw -> clean -> target -> chronological split -> features -> data/processed/."""
+"""raw -> congestion (full schedule) -> target -> features -> chronological split -> encode.
+
+Writes to ``paths.processed`` (git-ignored):
+  train.parquet, valid.parquet, test.parquet  encoded feature matrices + id, date, target
+  encoder.json                                FeatureEncoder fitted on train only
+  feature_spec.json                           feature groups, target, config snapshot, data hash
+"""
 
 import argparse
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from flight_delay.config import load_config  # noqa: E402
+from flight_delay.data.load import load_raw  # noqa: E402
+from flight_delay.data.schema import TARGET_COLUMN  # noqa: E402
+from flight_delay.features.build import (  # noqa: E402
+    build_feature_table,
+    encode_splits,
+    feature_groups,
+)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", default="configs/config.yaml")
+    parser.add_argument("--config", default=str(ROOT / "configs" / "config.yaml"))
     args = parser.parse_args()
-    # TODO: implement
-    raise NotImplementedError
+
+    cfg = load_config(args.config)
+    raw_path = ROOT / cfg["paths"]["raw"]
+    out_dir = ROOT / cfg["paths"]["processed"]
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    table = build_feature_table(load_raw(raw_path), cfg)
+    splits, encoder = encode_splits(table, cfg)
+    for name, frame in splits.items():
+        frame.drop(columns="split").to_parquet(out_dir / f"{name}.parquet", index=False)
+        print(f"{name:5s}: {len(frame):7,d} rows | positive rate {frame[TARGET_COLUMN].mean():.4f}")
+    encoder.save(out_dir / "encoder.json")
+
+    spec = {
+        "target": TARGET_COLUMN,
+        "target_definition": f"arr_delay >= {cfg['target']['threshold_minutes']} min",
+        "missing_label_policy": cfg["target"]["cancelled_policy"],
+        "decision_time": cfg["decision_time"]["mode"],
+        "feature_groups": feature_groups(cfg),
+        "categorical": encoder.categorical,
+        "numeric": encoder.numeric,
+        "split": cfg["split"],
+        "raw_sha256": hashlib.sha256(raw_path.read_bytes()).hexdigest(),
+    }
+    (out_dir / "feature_spec.json").write_text(json.dumps(spec, indent=1))
+    print(f"wrote {out_dir.relative_to(ROOT)}/: splits, encoder.json, feature_spec.json")
 
 
 if __name__ == "__main__":
